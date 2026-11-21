@@ -1,4 +1,5 @@
 import { jsonResponse, optionsResponse } from "../../lib/csl_dc_model.js";
+import { CSL_MATCHES_BY_SEASON } from "../../lib/csl_matches.js";
 
 const ESPN_SCOREBOARD_URL =
   "https://site.api.espn.com/apis/site/v2/sports/soccer/chn.1/scoreboard";
@@ -15,6 +16,12 @@ function toBeijingTime(isoUtc) {
   return `${y}-${m}-${d} ${hh}:${mm}`;
 }
 
+function cachedJsonResponse(data, status = 200) {
+  const res = jsonResponse(data, status);
+  res.headers.set("Cache-Control", "public, max-age=300, s-maxage=600");
+  return res;
+}
+
 export default async function onRequest(context) {
   const { request } = context;
 
@@ -28,6 +35,21 @@ export default async function onRequest(context) {
 
   const url = new URL(request.url);
   const season = url.searchParams.get("season") || "2026";
+  const forceLive = url.searchParams.get("live") === "1";
+
+  // Instant edge response from bundled dataset unless ?live=1 is requested
+  if (!forceLive && CSL_MATCHES_BY_SEASON[season]) {
+    const matches = CSL_MATCHES_BY_SEASON[season];
+    return cachedJsonResponse(
+      {
+        season: Number(season),
+        source: "edge-cache",
+        count: matches.length,
+        matches,
+      },
+      200
+    );
+  }
 
   try {
     const resp = await fetch(
@@ -57,8 +79,6 @@ export default async function onRequest(context) {
         date_beijing: toBeijingTime(ev.date),
         home_team: home.team?.displayName || "",
         away_team: away.team?.displayName || "",
-        home_logo: home.team?.logo || "",
-        away_logo: away.team?.logo || "",
         home_goals: home.score != null ? Number(home.score) : null,
         away_goals: away.score != null ? Number(away.score) : null,
         status: ev.status?.type?.name || "",
@@ -68,9 +88,10 @@ export default async function onRequest(context) {
 
     matches.sort((a, b) => b.date_utc.localeCompare(a.date_utc));
 
-    return jsonResponse(
+    return cachedJsonResponse(
       {
         season: Number(season),
+        source: "espn-live",
         count: matches.length,
         matches,
       },
