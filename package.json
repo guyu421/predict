@@ -1,0 +1,7 @@
+{
+  "name": "csl-dixon-coles-api",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "2023-2026 Chinese Super League Dixon-Coles + Time Decay prediction API on EdgeOne Makers"
+}
